@@ -27,7 +27,7 @@ public class RegionChangePacketListener implements PacketListener {
 			 * WARRIORS_GUILD)) player.getRegionInstance().destruct(); }
 			 * player.getNpcFacesUpdated().clear();
 			 */
-			RegionClipping.loadRegion(player.getPosition().getX(), player.getPosition().getY());
+			RegionClipping.forPosition(player.getPosition()).loadRegion(player.getPosition().getX(), player.getPosition().getY());
 			ObjectHandler.onRegionChange(player);
 
 			// CustomObjects.handleRegionChange(player);

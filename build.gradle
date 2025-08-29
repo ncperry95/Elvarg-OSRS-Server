@@ -1,0 +1,58 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group 'com.elvarg'
+version '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Netty for networking and ByteBuf
+    implementation 'io.netty:netty-all:4.1.68.Final'
+
+    // Gson for JSON handling (used in PlayerSaving)
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Guava for utility functions
+    implementation 'com.google.guava:guava:30.1-jre'
+
+    // Apache Commons Compress for file handling
+    implementation 'org.apache.commons:commons-compress:1.21'
+
+    // Logging (if not using java.util.logging directly)
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'ch.qos.logback:logback-classic:1.2.11'
+}
+
+application {
+    mainClass = 'com.elvarg.Elvarg'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['Elvarg - Server/src/main/java', 'Elvarg - Server/src']
+        }
+        resources {
+            srcDirs = ['Elvarg - Server/data']
+        }
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+task runXteaConverter(type: JavaExec) {
+    mainClass = 'com.elvarg.util.XteaConverter'
+    classpath = sourceSets.main.runtimeClasspath
+}

@@ -3,12 +3,11 @@ package com.elvarg.util;
 import static com.google.common.io.ByteStreams.toByteArray;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.zip.GZIPInputStream;
 
-import org.apache.tools.bzip2.CBZip2InputStream;
-
-import com.elvarg.cache.CacheLoader;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 
 /**
  * A static-utility class containing containing extension or helper methods for
@@ -18,72 +17,70 @@ import com.elvarg.cache.CacheLoader;
  */
 public final class CompressionUtil {
 
-	/**
-	 * Uncompresses a {@code byte} array of g-zipped data.
-	 * 
-	 * @param data
-	 *            The compressed, g-zipped data.
-	 * @return The uncompressed data.
-	 * @throws IOException
-	 *             If some I/O exception occurs.
-	 */
-	public static byte[] gunzip(byte[] data) throws IOException {
-		return toByteArray(new GZIPInputStream(new ByteArrayInputStream(data)));
-	}
+    /**
+     * Uncompresses a {@code byte} array of g-zipped data.
+     * 
+     * @param data The compressed, g-zipped data.
+     * @return The uncompressed data.
+     * @throws IOException If some I/O exception occurs.
+     */
+    public static byte[] gunzip(byte[] data) throws IOException {
+        return toByteArray(new GZIPInputStream(new ByteArrayInputStream(data)));
+    }
 
-	/**
-	 * Uncompresses a {@code byte} array of b-zipped data that does not contain
-	 * a header.
-	 * <p>
-	 * <p>
-	 * A b-zip header block consists of <tt>2</tt> {@code byte}s, they are
-	 * replaced with 'h' and '1' as that is what our {@link CacheLoader file
-	 * system} compresses the header as.
-	 * </p>
-	 * 
-	 * @param data
-	 *            The compressed, b-zipped data.
-	 * @param offset
-	 *            The offset position of the data.
-	 * @param length
-	 *            The length of the data.
-	 * @return The uncompressed data.
-	 * @throws IOException
-	 *             If some I/O exception occurs.
-	 */
-	public static byte[] unbzip2Headerless(byte[] data, int offset, int length) throws IOException {
-		/* Strip the header from the data. */
-		byte[] bzip2 = new byte[length + 2];
-		bzip2[0] = 'h';
-		bzip2[1] = '1';
-		System.arraycopy(data, offset, bzip2, 2, length);
+    /**
+     * Uncompresses a {@code byte} array of b-zipped data that does not contain
+     * a header.
+     * <p>
+     * <p>
+     * A b-zip header block consists of <tt>2</tt> {@code byte}s, they are
+     * replaced with 'h' and '1' as that is what our {@link CacheLoader file
+     * system} compresses the header as.
+     * </p>
+     * 
+     * @param data   The compressed, b-zipped data.
+     * @param offset The offset position of the data.
+     * @param length The length of the data.
+     * @return The uncompressed data.
+     * @throws IOException If some I/O exception occurs.
+     */
+    public static byte[] unbzip2Headerless(byte[] data, int offset, int length) throws IOException {
+        /* Strip the header from the data. */
+        byte[] bzip2 = new byte[length + 2];
+        bzip2[0] = 'h';
+        bzip2[1] = '1';
+        System.arraycopy(data, offset, bzip2, 2, length);
 
-		/* Uncompress the headerless data */
-		return unbzip2(bzip2);
-	}
+        /* Uncompress the headerless data */
+        return unbzip2(bzip2);
+    }
 
-	/**
-	 * Uncompresses a {@code byte} array of b-zipped data.
-	 * 
-	 * @param data
-	 *            The compressed, b-zipped data.
-	 * @return The uncompressed data.
-	 * @throws IOException
-	 *             If some I/O exception occurs.
-	 */
-	public static byte[] unbzip2(byte[] data) throws IOException {
-		return toByteArray(new CBZip2InputStream(new ByteArrayInputStream(data)));
-	}
+    /**
+     * Uncompresses a {@code byte} array of b-zipped data.
+     * 
+     * @param data The compressed, b-zipped data.
+     * @return The uncompressed data.
+     * @throws IOException If some I/O exception occurs.
+     */
+    public static byte[] unbzip2(byte[] data) throws IOException {
+        try (BZip2CompressorInputStream bzip2 = new BZip2CompressorInputStream(new ByteArrayInputStream(data));
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = bzip2.read(buffer)) > 0) {
+                out.write(buffer, 0, len);
+            }
+            return out.toByteArray();
+        }
+    }
 
-	/**
-	 * Suppresses the default-public constructor preventing this class from
-	 * being instantiated by other classes.
-	 * 
-	 * @throws UnsupportedOperationException
-	 *             If this class is instantiated within itself.
-	 */
-	private CompressionUtil() {
-		throw new UnsupportedOperationException("static-utility classes may not be instantiated.");
-	}
-
+    /**
+     * Suppresses the default-public constructor preventing this class from
+     * being instantiated by other classes.
+     * 
+     * @throws UnsupportedOperationException If this class is instantiated within itself.
+     */
+    private CompressionUtil() {
+        throw new UnsupportedOperationException("static-utility classes may not be instantiated.");
+    }
 }
