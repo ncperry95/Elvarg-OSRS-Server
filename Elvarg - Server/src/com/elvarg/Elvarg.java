@@ -18,7 +18,9 @@ import com.elvarg.engine.task.impl.CombatPoisonEffect.CombatPoisonData;
 import com.elvarg.net.NetworkConstants;
 import com.elvarg.net.channel.ChannelPipelineHandler;
 import com.elvarg.util.ShutdownHook;
+import com.elvarg.world.World;
 import com.elvarg.world.collision.region.RegionClipping;
+import com.elvarg.world.content.PlayerPunishment;
 import com.elvarg.world.content.clan.ClanChatManager;
 import com.elvarg.world.model.dialogue.DialogueManager;
 
@@ -31,36 +33,24 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.ResourceLeakDetector;
 import io.netty.util.ResourceLeakDetector.Level;
 import jaggrab.Jaggrab;
+
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
- * The starting point of Elvarg.
- * 
- * @author Swiffy
- * @author Professor Oak
+ * Entry point for Elvarg.
  */
-public class Elvarg {
+public final class Elvarg {
 
-    /**
-     * The game engine, executed by {@link ScheduledExecutorService}. The game
-     * engine's cycle rate is normally 600 ms.
-     */
+    /** Game engine (600ms tick). */
     private static final GameEngine engine = new GameEngine();
 
-    /**
-     * The cache loader. Loads the client's cache files. Used for definitions,
-     * clipping, etc..
-     */
+    /** Cache loader (defs, clipping, etc). */
     private static final CacheLoader cacheLoader = new CacheLoader();
 
-    /**
-     * Is the server currently updating?
-     */
+    /** Updating flag. */
     private static boolean updating;
 
-    /**
-     * The main logger.
-     */
+    /** Logger. */
     private static final Logger logger = Logger.getLogger("Elvarg");
 
     public static void main(String[] params) {
@@ -68,78 +58,92 @@ public class Elvarg {
         try {
             logger.info("Initializing the game...");
 
-            final ExecutorService serviceLoader = Executors
-                    .newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("GameLoadingThread").build());
+            final ExecutorService serviceLoader =
+                    Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+                            .setNameFormat("GameLoadingThread").build());
 
-            // Load the cache..
+            // Load cache + optional JAGGRAB
             serviceLoader.execute(() -> {
                 try {
                     cacheLoader.init();
 
-                    // JAGGRAB
                     if (GameConstants.JAGGRAB_ENABLED) {
-                        new Jaggrab().init();
+                        // Jaggrab.init() declares throws Exception; wrap it here
+                        try {
+                            new Jaggrab().init();
+                        } catch (Exception e) {
+                            logger.warning("JAGGRAB failed to start: " + e.getMessage());
+                            e.printStackTrace();
+                        }
                     }
-
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             });
 
             // DEFINITIONS
-            logger.info("Loading definitions...");
-            serviceLoader.execute(() -> ItemDefinition.init());
-            serviceLoader.execute(() -> NpcDefinition.init());
-            serviceLoader.execute(() -> ObjectDefinition.init());
-            serviceLoader.execute(() -> RegionClipping.init());
+            serviceLoader.execute(() -> ItemDefinition.parseItems().load());
+            serviceLoader.execute(() -> NpcDefinition.parseNpcs().load());
             serviceLoader.execute(() -> ObjectDefinition.parseObjects().load());
             serviceLoader.execute(() -> ShopDefinition.parseShops().load());
             serviceLoader.execute(() -> WeaponInterfaces.parseInterfaces().load());
             serviceLoader.execute(() -> DialogueManager.parseDialogues().load());
 
-            // OTHERS
+            // OTHER SYSTEMS
             serviceLoader.execute(() -> ClanChatManager.init());
             serviceLoader.execute(() -> CombatPoisonData.init());
+            serviceLoader.execute(() -> RegionClipping.init());
+            serviceLoader.execute(() -> World.init());
+            serviceLoader.execute(() -> PlayerPunishment.init());
 
-            // Shutdown the loader
+            // Shutdown the loader and await completion
             serviceLoader.shutdown();
-
-            // Make sure the loader is properly shut down
-            if (!serviceLoader.awaitTermination(15, TimeUnit.MINUTES))
+            if (!serviceLoader.awaitTermination(15, TimeUnit.MINUTES)) {
                 throw new IllegalStateException("The background service load took too long!");
+            }
 
-            // Bind the port...
+            // Bind game port
             logger.info("Binding port " + NetworkConstants.GAME_PORT + "...");
             ResourceLeakDetector.setLevel(Level.DISABLED);
             EventLoopGroup loopGroup = new NioEventLoopGroup();
             ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(loopGroup).channel(NioServerSocketChannel.class).childHandler(new ChannelPipelineHandler())
-                    .bind(NetworkConstants.GAME_PORT).syncUninterruptibly();
+            bootstrap.group(loopGroup)
+                     .channel(NioServerSocketChannel.class)
+                     .childHandler(new ChannelPipelineHandler())
+                     .bind(NetworkConstants.GAME_PORT)
+                     .syncUninterruptibly();
 
-            // Start the game engine using a {@link ScheduledExecutorService}
+            // Start game engine loop
             logger.info("Starting game engine...");
-            final ScheduledExecutorService executor = Executors
-                    .newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setNameFormat("GameThread").build());
-            executor.scheduleAtFixedRate(engine, 0, GameConstants.ENGINE_PROCESSING_CYCLE_RATE, TimeUnit.MILLISECONDS);
+            final ScheduledExecutorService executor =
+                    Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
+                            .setNameFormat("GameThread").build());
+            executor.scheduleAtFixedRate(
+                    engine, 0, GameConstants.ENGINE_PROCESSING_CYCLE_RATE, TimeUnit.MILLISECONDS);
 
-            logger.info("The loader has finished loading utility tasks.");
-            logger.info("Elvarg is now online on port " + NetworkConstants.GAME_PORT + "!");
+            logger.info("Elvarg successfully started.");
         } catch (Exception ex) {
-            logger.log(java.util.logging.Level.SEVERE, "Could not start Elvarg! Program terminated.", ex);
+            logger.severe("Could not start Elvarg! Program terminated.");
+            ex.printStackTrace();
             System.exit(1);
         }
     }
 
+    /** Expose cache loader if needed elsewhere. */
     public static CacheLoader getCache() {
         return cacheLoader;
     }
 
+    /**
+     * Provide RegionClipping (and others) access to cache files.
+     * Matches the old call sites: Elvarg.getFile(archive, file).
+     */
     public static ByteBuf getFile(int archive, int file) {
         try {
             return cacheLoader.getFile(archive, file);
         } catch (IOException e) {
             e.printStackTrace();
-            return Unpooled.buffer(0); // Return empty buffer on error
+            return Unpooled.buffer(0); // safe empty buffer on failure
         }
     }
 
@@ -153,5 +157,22 @@ public class Elvarg {
 
     public static boolean isUpdating() {
         return Elvarg.updating;
+    }
+
+    public static final class GameConstants {
+        public static final boolean JAGGRAB_ENABLED = false;
+        public static final int ENGINE_PROCESSING_CYCLE_RATE = 600;
+        public static final boolean LOG_PLAYER_COMMANDS = false;
+        public static final int LOGIN_LIMIT_PER_COMPUTER = 2;
+        public static final int PLAYERS_LIMIT = 350;
+        public static final int GAME_PORT = 43594;
+        public static final int NEW_CONNECTIONS_LIMIT_PER_SECOND = 30;
+        public static final int PACKETS_LIMIT_PER_SECOND = 80;
+        public static final int CONNECTIONS_LIMIT_PER_CYCLE = 15;
+        public static final int MESSAGES_LIMIT_PER_CYCLE = 25;
+        public static final int PACKETS_LIMIT_PER_CYCLE = 40;
+        public static final int MAX_PACKET_PAYLOAD_SIZE = 10000;
+
+        private GameConstants() {}
     }
 }

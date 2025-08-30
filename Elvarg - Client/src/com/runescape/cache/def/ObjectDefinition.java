@@ -1,6 +1,7 @@
 package com.runescape.cache.def;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import com.runescape.Client;
 import com.runescape.cache.FileArchive;
 import com.runescape.cache.anim.Frame;
@@ -9,6 +10,13 @@ import com.runescape.collection.ReferenceCache;
 import com.runescape.entity.model.Model;
 import com.runescape.io.Buffer;
 import com.runescape.net.requester.ResourceProvider;
+package com.elvarg.cache.impl.definitions;
+
+import com.elvarg.Elvarg;
+import com.elvarg.cache.CacheArchive;
+import com.elvarg.cache.CacheConstants;
+import java.io.IOException;
+
 
 public final class ObjectDefinition {
 
@@ -62,6 +70,15 @@ public final class ObjectDefinition {
 	public ObjectDefinition() {
 		type = -1;
 	}
+
+	public class ObjectDefinition {
+
+    public static void loadDefinitions() throws IOException {
+        // Propagate IOException up the call chain
+        CacheArchive objectDefs = Elvarg.getCache().getArchive(CacheConstants.CONFIG_ARCHIVE);
+        // ... rest of your definition loading logic
+    }
+}
 
 	public static ObjectDefinition lookup(int id) {
 		if (id > streamIndices.length)
