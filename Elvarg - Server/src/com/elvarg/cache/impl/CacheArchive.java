@@ -1,5 +1,6 @@
 package com.elvarg.cache.impl;
 
+
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -9,9 +10,12 @@ import com.elvarg.net.ByteBufUtils;
 import com.elvarg.util.CompressionUtil;
 import com.elvarg.util.Misc;
 import com.google.common.base.Preconditions;
+import com.elvarg.cache.impl.CacheArchive;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
+import jaggrab.net.FileDescriptor;
 
 /**
  * Represents an archive within the {@link Cache}.

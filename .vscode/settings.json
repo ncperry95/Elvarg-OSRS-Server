@@ -1,3 +1,10 @@
 {
-    "java.compile.nullAnalysis.mode": "automatic"
+    "java.project.sourcePaths": [
+        "Elvarg - Server/src",
+        "Elvarg - Client/src"
+    ],
+    "java.project.referencedLibraries": [
+        "Elvarg - Server/lib/**/*.jar",
+        "Elvarg - Client/lib/**/*.jar"
+    ]
 }
