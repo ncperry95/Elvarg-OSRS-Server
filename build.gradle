@@ -6,19 +6,12 @@ plugins {
 group = 'com.elvarg'
 version = '1.0.0'
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // If your repo already provides Netty/Gson, you can keep this empty.
-    // If not, uncomment and set versions that match your code:
+    // If your project needs these explicitly, uncomment and set versions that match your code.
     // implementation 'io.netty:netty-all:4.1.108.Final'
     // implementation 'com.google.code.gson:gson:2.10.1'
 
@@ -26,17 +19,31 @@ dependencies {
 }
 
 application {
-    // Entry point
+    // Your entry point
     mainClass = 'com.elvarg.Elvarg'
 }
 
+// Use your current JDK; don’t force a toolchain to be downloaded.
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // If needed, uncomment and set to your current JDK level (e.g. 17 or 21)
+    // sourceCompatibility = JavaVersion.VERSION_17
+    // targetCompatibility = JavaVersion.VERSION_17
+}
+
+/** Make the NORMAL jar runnable via `java -jar build/libs/elvarg-1.0.0.jar` */
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes('Main-Class': application.mainClass.get())
+    }
+    archiveBaseName.set('elvarg')
+    archiveVersion.set('1.0.0')
+    archiveClassifier.set('')
 }
 
 /**
  * Build a separate runnable “fat” JAR (includes runtime deps).
- * This avoids modifying the normal `jar` task and works on Gradle 9.
+ * This leaves the normal `jar` intact and runnable too.
  */
 tasks.register('fatJar', Jar) {
     group = 'build'
@@ -44,38 +51,28 @@ tasks.register('fatJar', Jar) {
 
     archiveBaseName.set('elvarg')
     archiveVersion.set('1.0.0')
-    archiveClassifier.set('') // no "-all" suffix; simple name
+    archiveClassifier.set('all')
 
-    // Main class so `java -jar` works
-    manifest {
-        attributes 'Main-Class': application.mainClass.get()
-    }
-
-    // Include compiled classes/resources
+    // Classes/resources from this project
     from(sourceSets.main.output)
 
-    // Merge runtime dependencies into the JAR
-    dependsOn configurations.runtimeClasspath
+    // Add runtime dependencies
+    dependsOn(configurations.runtimeClasspath)
     from({
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }) {
-        // Avoid signature and duplicate issues
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
         exclude 'module-info.class'
     }
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes('Main-Class': application.mainClass.get())
+    }
 }
 
-/**
- * Keep the Application plugin run task (uses correct runtime classpath automatically).
- * Run with: gradlew run
- */
+/** Keep `gradlew run` working (uses the correct CP automatically) */
 tasks.named('run') {
     standardInput = System.in
 }
-
-/**
- * Optional: create a self-contained distribution with launch scripts.
- * Run with: gradlew installDist  -> build/install/elvarg/bin/elvarg(.bat)
- */
