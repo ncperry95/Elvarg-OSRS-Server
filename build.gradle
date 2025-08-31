@@ -10,53 +10,60 @@ repositories {
     mavenCentral()
 }
 
+/** Map sources to your actual folders */
+sourceSets {
+    main {
+        java {
+            srcDirs = ["Elvarg - Server/src"]
+        }
+        resources {
+            srcDirs = ["Elvarg - Server/resources"]
+        }
+    }
+    test {
+        java {
+            // keep Gradle defaults if you don't have tests
+            // srcDirs = ["Elvarg - Server/test"]
+        }
+    }
+}
+
 dependencies {
-    // If your project needs these explicitly, uncomment and set versions that match your code.
+    // Uncomment if you need explicit deps here; else keep as-is if bundled already.
     // implementation 'io.netty:netty-all:4.1.108.Final'
     // implementation 'com.google.code.gson:gson:2.10.1'
-
     testImplementation 'junit:junit:4.13.2'
 }
 
 application {
-    // Your entry point
     mainClass = 'com.elvarg.Elvarg'
 }
 
-// Use your current JDK; don’t force a toolchain to be downloaded.
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    // If needed, uncomment and set to your current JDK level (e.g. 17 or 21)
-    // sourceCompatibility = JavaVersion.VERSION_17
-    // targetCompatibility = JavaVersion.VERSION_17
 }
 
-/** Make the NORMAL jar runnable via `java -jar build/libs/elvarg-1.0.0.jar` */
+/** Make the NORMAL jar runnable (classes only; no deps) */
 tasks.named('jar', Jar).configure {
-    manifest {
-        attributes('Main-Class': application.mainClass.get())
-    }
+    from(sourceSets.main.output)
+    manifest { attributes('Main-Class': application.mainClass.get()) }
     archiveBaseName.set('elvarg')
     archiveVersion.set('1.0.0')
     archiveClassifier.set('')
 }
 
-/**
- * Build a separate runnable “fat” JAR (includes runtime deps).
- * This leaves the normal `jar` intact and runnable too.
- */
+/** Build a runnable fat JAR (includes runtime deps) */
 tasks.register('fatJar', Jar) {
     group = 'build'
     description = 'Assembles a runnable fat JAR with all dependencies.'
-
     archiveBaseName.set('elvarg')
     archiveVersion.set('1.0.0')
     archiveClassifier.set('all')
 
-    // Classes/resources from this project
+    // 1) include compiled output
     from(sourceSets.main.output)
 
-    // Add runtime dependencies
+    // 2) merge runtime deps
     dependsOn(configurations.runtimeClasspath)
     from({
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
@@ -67,12 +74,10 @@ tasks.register('fatJar', Jar) {
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    manifest {
-        attributes('Main-Class': application.mainClass.get())
-    }
+    manifest { attributes('Main-Class': application.mainClass.get()) }
 }
 
-/** Keep `gradlew run` working (uses the correct CP automatically) */
+/** Keep run working (full classpath) */
 tasks.named('run') {
     standardInput = System.in
 }
