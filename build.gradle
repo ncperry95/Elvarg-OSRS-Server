@@ -72,3 +72,9 @@ tasks.register('runConverter', JavaExec) {
         println "------------------------------\n"
     }
 }
+
+jar {
+    manifest {
+        attributes('Main-Class': application.mainClass.get())
+    }
+}
