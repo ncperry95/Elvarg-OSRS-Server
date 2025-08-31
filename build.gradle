@@ -1,82 +1,77 @@
 plugins {
     id 'java'
     id 'application'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
-
 
 group = 'com.elvarg'
 version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // JSON
-    implementation 'com.google.code.gson:gson:2.11.0'
+    // If your project already resolves Netty/Gson via libs or other means, you can keep this empty.
+    // If you need them explicitly, uncomment (pick versions your repo uses):
+    // implementation 'io.netty:netty-all:4.1.108.Final'
+    // implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Utilities (optional but handy)
-    implementation 'com.google.guava:guava:33.2.1-jre'
-
-    implementation "com.displee:rs-cache-library:6.8.1"
-
-    // Netty – brings in ByteBuf, Channel, NIO transports, handlers, codecs, etc.
-    implementation 'io.netty:netty-all:4.1.92.Final'
-
-    implementation 'org.apache.commons:commons-compress:1.26.2'
-}
-
-java {
-    // Use your installed JDK 23 to build
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(23)
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    // Generate Java 17 bytecode (original projects are often 8–11; 17 is fine)
-    options.release = 17
-    options.encoding = 'UTF-8'
-    // silence the “source/target 8 is obsolete” nags if any old flags linger
-    options.compilerArgs += ['-Xlint:-options']
-}
-
-sourceSets {
-    main {
-        java.srcDirs = ['Elvarg - Server/src']
-        resources.srcDirs = ['Elvarg - Server/resources', 'Elvarg - Server/data']
-    }
-    test {
-        java.srcDirs = ['Elvarg - Server/test']
-    }
+    testImplementation 'junit:junit:4.13.2'
 }
 
 application {
-    // Normal server entrypoint (if/when you run the game)
+    // Your main entry point
     mainClass = 'com.elvarg.Elvarg'
 }
 
-// --- XTEA converter runner ---
-tasks.register('runConverter', JavaExec) {
-    group = "tools"
-    description = "Convert OpenRS2 keys.json to Elvarg xteas.json and per-region files"
-    dependsOn 'classes'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.elvarg.util.XteaConverter'
-
-    // Feel free to change the arguments/paths:
-    args 'https://archive.openrs2.org/keys/valid.json', 'Elvarg - Server/data/xtea'
-
-    doFirst {
-        println "\n--- runConverter CLASSPATH ---"
-        println classpath.asPath
-        println "------------------------------\n"
+/**
+ * Build a runnable "fat" jar without Shadow.
+ * - Adds Main-Class to manifest
+ * - Merges runtime dependencies into the jar
+ * - Excludes duplicate META-INF signature files
+ */
+tasks.named('jar') {
+    // Make it a fat jar
+    from(
+        configurations.runtimeClasspath.get()
+            .filter { it.name.endsWith('.jar') }
+            .collect { zipTree(it) }
+    ) {
+        // Avoid signature/duplicate issues
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+        exclude 'module-info.class'
     }
+
+    // If two jars contain same entries, prefer first
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    // Proper manifest so `java -jar` works
+    manifest {
+        attributes(
+            'Main-Class': application.mainClass.get()
+        )
+    }
+
+    // Optional: control the output name
+    archiveBaseName.set('elvarg')
+    archiveVersion.set('1.0.0')
+    archiveClassifier.set('') // no "-all" suffix; it's already fat
 }
 
-jar {
-    manifest {
-        attributes('Main-Class': application.mainClass.get())
-    }
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+/**
+ * Still keep `run` working via Application plugin.
+ * You can pass args with: gradlew run --args="arg1 arg2"
+ */
+tasks.named('run') {
+    standardInput = System.in
 }
