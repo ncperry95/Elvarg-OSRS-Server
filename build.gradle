@@ -10,74 +10,106 @@ repositories {
     mavenCentral()
 }
 
-/** Map sources to your actual folders */
-sourceSets {
-    main {
-        java {
-            srcDirs = ["Elvarg - Server/src"]
-        }
-        resources {
-            srcDirs = ["Elvarg - Server/resources"]
-        }
-    }
+dependencies {
+    // Netty / Guava / Gson / Commons-Compress
+    implementation 'io.netty:netty-all:4.1.110.Final'
+    implementation 'com.google.guava:guava:33.2.1-jre'
+    implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'org.apache.commons:commons-compress:1.26.2'
 }
 
-dependencies {
-    // Networking & buffers
-    implementation 'io.netty:netty-all:4.1.108.Final'
-
-    // Utilities/collections/concurrency
-    implementation 'com.google.guava:guava:33.2.1-jre'
-
-    // JSON
-    implementation 'com.google.code.gson:gson:2.10.1'
-
-    testImplementation 'junit:junit:4.13.2'
+java {
+    // Use whatever you have installed; leaving toolchains off to avoid auto-downloads
+    withJavadocJar()
+    withSourcesJar()
 }
 
 application {
+    // Main entrypoint
     mainClass = 'com.elvarg.Elvarg'
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+/**
+ * Your sources aren’t in the default src/main/java — they’re under:
+ *   "Elvarg - Server/src"
+ * Tell Gradle explicitly so it compiles and packages them.
+ */
+sourceSets {
+    main {
+        java {
+            setSrcDirs(['Elvarg - Server/src'])
+            // include all .java under that tree by default
+        }
+        resources {
+            // if you have any non-java assets in the same tree, include them as resources
+            setSrcDirs(['Elvarg - Server/resources', 'Elvarg - Server/src'])
+            // don’t treat .java files as resources
+            exclude '**/*.java'
+        }
+    }
+    test {
+        java {
+            // if you add tests later, point to them here
+            setSrcDirs(['Elvarg - Server/test'])
+        }
+    }
 }
 
-/** Make the NORMAL jar runnable (classes only; no deps) */
-tasks.named('jar', Jar).configure {
-    from(sourceSets.main.output)
-    manifest { attributes('Main-Class': application.mainClass.get()) }
-    archiveBaseName.set('elvarg')
-    archiveVersion.set('1.0.0')
-    archiveClassifier.set('')
+/**
+ * Normal thin JAR (classes only). Make it runnable via manifest.
+ */
+tasks.jar {
+    manifest {
+        attributes(
+            'Main-Class': 'com.elvarg.Elvarg'
+        )
+    }
 }
 
-/** Build a runnable fat JAR (includes runtime deps) */
+/**
+ * FAT JAR (includes classes + all runtime dependencies)
+ * Output: build/libs/elvarg-1.0.0-all.jar
+ */
 tasks.register('fatJar', Jar) {
     group = 'build'
-    description = 'Assembles a runnable fat JAR with all dependencies.'
+    description = 'Builds a runnable fat jar with all dependencies.'
     archiveBaseName.set('elvarg')
-    archiveVersion.set('1.0.0')
+    archiveVersion.set(version)
     archiveClassifier.set('all')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    // include compiled classes/resources
-    from(sourceSets.main.output)
-
-    // include runtime dependencies
-    dependsOn(configurations.runtimeClasspath)
-    from({
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    }) {
-        // avoid signature/module clashes
-        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
-        exclude 'module-info.class'
+    manifest {
+        attributes(
+            'Main-Class': 'com.elvarg.Elvarg'
+        )
     }
 
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    manifest { attributes('Main-Class': application.mainClass.get()) }
+    // 1) include *your* compiled classes & resources
+    from(sourceSets.main.output)
+
+    // 2) include all dependency jars’ contents
+    from({
+        configurations.runtimeClasspath
+            .filter { it.name.endsWith('.jar') }
+            .collect { zipTree(it) }
+    })
 }
 
-/** Keep `gradlew run` working */
-tasks.named('run') {
-    standardInput = System.in
+/**
+ * Keep the `run` task working during development.
+ */
+tasks.run {
+    dependsOn tasks.classes
+    classpath = sourceSets.main.runtimeClasspath
 }
+
+tasks.withType(Javadoc).configureEach {
+    // Turn off doclint & don’t fail the build on doc issues
+    options.addBooleanOption('Xdoclint:none', true)
+    failOnError = false
+}
+
+tasks.javadoc {
+    failOnError = false
+}
+
