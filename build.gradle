@@ -20,18 +20,18 @@ sourceSets {
             srcDirs = ["Elvarg - Server/resources"]
         }
     }
-    test {
-        java {
-            // keep Gradle defaults if you don't have tests
-            // srcDirs = ["Elvarg - Server/test"]
-        }
-    }
 }
 
 dependencies {
-    // Uncomment if you need explicit deps here; else keep as-is if bundled already.
-    // implementation 'io.netty:netty-all:4.1.108.Final'
-    // implementation 'com.google.code.gson:gson:2.10.1'
+    // Networking & buffers
+    implementation 'io.netty:netty-all:4.1.108.Final'
+
+    // Utilities/collections/concurrency
+    implementation 'com.google.guava:guava:33.2.1-jre'
+
+    // JSON
+    implementation 'com.google.code.gson:gson:2.10.1'
+
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -60,24 +60,24 @@ tasks.register('fatJar', Jar) {
     archiveVersion.set('1.0.0')
     archiveClassifier.set('all')
 
-    // 1) include compiled output
+    // include compiled classes/resources
     from(sourceSets.main.output)
 
-    // 2) merge runtime deps
+    // include runtime dependencies
     dependsOn(configurations.runtimeClasspath)
     from({
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }) {
+        // avoid signature/module clashes
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
         exclude 'module-info.class'
     }
 
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
     manifest { attributes('Main-Class': application.mainClass.get()) }
 }
 
-/** Keep run working (full classpath) */
+/** Keep `gradlew run` working */
 tasks.named('run') {
     standardInput = System.in
 }
