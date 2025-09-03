@@ -1,0 +1,57 @@
+﻿plugins {
+    application
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("org.openjfx.javafxplugin") version "0.0.13"
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    // You have JDK 21 installed; still emit Java 8 bytecode for compatibility
+    toolchain { languageVersion.set(JavaLanguageVersion.of(21)) }
+}
+
+tasks.withType<JavaCompile> {
+    options.release.set(8)
+    options.encoding = "UTF-8"
+}
+
+application {
+    // This is what your earlier run logs showed
+    mainClass.set("net.runelite.client.RuneLite")
+    applicationDefaultJvmArgs = listOf("--add-modules=javafx.base")
+}
+
+javafx {
+    // Your earlier logs used JavaFX 16
+    version = "16"
+    modules = listOf("javafx.base")
+}
+
+dependencies {
+    // Lombok (annotations like @Getter/@Value/@Slf4j)
+    compileOnly("org.projectlombok:lombok:1.18.32")
+    annotationProcessor("org.projectlombok:lombok:1.18.32")
+
+    // SLF4J
+    implementation("org.slf4j:slf4j-api:2.0.12")
+    runtimeOnly("org.slf4j:slf4j-simple:2.0.12")
+
+    // OkHttp (brings Okio transitively)
+    implementation("com.squareup.okhttp3:okhttp:4.9.3")
+
+    // JetBrains @Nullable, etc.
+    compileOnly("org.jetbrains:annotations:24.1.0")
+}
+
+tasks.named<Jar>("jar") {
+    manifest { attributes["Main-Class"] = "net.runelite.client.RuneLite" }
+}
+
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    archiveBaseName.set("elvarg-client")
+    archiveClassifier.set("all")
+    archiveVersion.set("")
+}

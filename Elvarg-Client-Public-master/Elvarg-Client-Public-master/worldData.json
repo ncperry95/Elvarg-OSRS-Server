@@ -1,0 +1,14 @@
+﻿{
+    "worlds":  [
+                   {
+                       "id":  1,
+                       "flag":  0,
+                       "activity":  "Local",
+                       "location":  0,
+                       "members":  true,
+                       "port":  43595,
+                       "players":  0,
+                       "address":  "127.0.0.1"
+                   }
+               ]
+}

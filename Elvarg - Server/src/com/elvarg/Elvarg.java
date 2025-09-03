@@ -1,76 +1,114 @@
 package com.elvarg;
 
 import com.elvarg.cache.CacheLoader;
-import io.netty.buffer.ByteBuf;
+import com.elvarg.net.channel.ChannelPipelineHandler;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 /**
- * Elvarg bootstrap – compile-first.
- *
- * Adds:
- *  - Static logger + getLogger()
- *  - Updating flag + isUpdating()
- *  - Static getFile(int,int) passthrough used by RegionClipping, etc.
- *  - Keeps definition/world loaders commented until APIs are aligned.
+ * Minimal Elvarg server bootstrap.
+ * - Starts a Netty listener using the existing ChannelPipelineHandler.
+ * - Port defaults to 43595 (override with -Delvarg.port=43595).
+ * - Leaves your existing compile-first shims in place so we can iterate.
  */
-public class Elvarg {
+public final class Elvarg {
 
-    private static final ExecutorService serviceLoader = Executors.newFixedThreadPool(
-            Math.max(2, Runtime.getRuntime().availableProcessors() / 2)
-    );
+    private static final Logger LOGGER = Logger.getLogger("Elvarg");
+    private static final ExecutorService serviceLoader = Executors.newFixedThreadPool(2);
 
-    // Simple logger for call sites like LoginDecoder
-    private static final Logger LOGGER = Logger.getLogger(Elvarg.class.getName());
-
-    // Server updating flag used by LoginResponses/World
-    private static volatile boolean UPDATING = false;
-
-    // Global cache access
     private static final CacheLoader CACHE = new CacheLoader();
 
-    public static CacheLoader getCache() {
-        return CACHE;
-    }
+    private static volatile boolean UPDATING = false;
 
-    /** Expose logger for call sites. */
     public static Logger getLogger() {
         return LOGGER;
     }
 
-    /** Expose updating flag for call sites. */
     public static boolean isUpdating() {
         return UPDATING;
     }
 
-    /** Optional setter if you later want to flip maintenance mode. */
     public static void setUpdating(boolean updating) {
         UPDATING = updating;
     }
 
-    /** Some call sites expect Elvarg.getFile(...). Provide a static passthrough. */
-    public static ByteBuf getFile(int archive, int file) {
-        return CACHE.getFile(archive, file);
-    }
-
-    /** Convenience used elsewhere too. */
-    public static ByteBuf getCacheFile(int archive, int file) {
-        return CACHE.getFile(archive, file);
-    }
-
+    /** Entry point. */
     public static void main(String[] args) {
-        // Safe no-op (exists to satisfy calls in existing code)
-        CACHE.init();
+        // Initialize cache shim (safe even if it returns empty buffers for now)
+        try {
+            CACHE.init();
+        } catch (Throwable t) {
+            LOGGER.warning("Cache init failed (continuing for now): " + t.getMessage());
+        }
 
-        // These caused “cannot find symbol” in your current tree.
-        // Re-enable after wiring to real methods that exist in your codebase.
-        //
+        // If/when you wire real definitions/world init, kick them off here.
         // serviceLoader.execute(() -> ItemDefinition.parseItems().load());
         // serviceLoader.execute(() -> NpcDefinition.parseNpcs().load());
-        // serviceLoader.execute(() -> World.init());
+        // serviceLoader.execute(World::init);
 
-        LOGGER.info("Elvarg bootstrap started.");
+        final int port = getPort();
+        LOGGER.info("Starting Elvarg Netty server on port " + port + "...");
+
+        // Standard Netty bootstrap
+        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        try {
+            ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(bossGroup, workerGroup)
+                .channel(NioServerSocketChannel.class)
+                .childHandler(new ChannelPipelineHandler())
+                .childOption(ChannelOption.TCP_NODELAY, true)
+                .childOption(ChannelOption.SO_KEEPALIVE, true);
+
+            ChannelFuture bindFuture = bootstrap.bind(port).syncUninterruptibly();
+            LOGGER.info("Elvarg server is listening on 0.0.0.0:" + port);
+
+            // Keep process alive until channel closes
+            addShutdownHook(bossGroup, workerGroup);
+            bindFuture.channel().closeFuture().syncUninterruptibly();
+        } finally {
+            // In case we broke out of the run loop unexpectedly
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+            serviceLoader.shutdown();
+            LOGGER.info("Elvarg server stopped.");
+        }
+    }
+
+    private static int getPort() {
+        String prop = System.getProperty("elvarg.port");
+        if (prop != null && !prop.isEmpty()) {
+            try { return Integer.parseInt(prop); } catch (NumberFormatException ignored) {}
+        }
+        return 43595;
+    }
+    // --- add these in com.elvarg.Elvarg (inside the class) ---
+    public static com.elvarg.cache.CacheLoader getCache() {
+        return ElvargCache.getCache();
+    }
+
+    public static io.netty.buffer.ByteBuf getFile(int indexId, int fileId) {
+        return ElvargCache.getFile(indexId, fileId);
+    }
+    // --- end additions ---
+
+
+    private static void addShutdownHook(EventLoopGroup boss, EventLoopGroup worker) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                LOGGER.info("Shutting down Netty event loops...");
+                boss.shutdownGracefully().syncUninterruptibly();
+                worker.shutdownGracefully().syncUninterruptibly();
+            } catch (Throwable ignored) {
+            }
+        }, "elvarg-shutdown"));
     }
 }
